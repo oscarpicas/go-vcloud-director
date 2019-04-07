@@ -51,7 +51,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/vmware/go-vcloud-director/v2/govcd"
+	"github.com/vmware/go-vcloud-director/govcd"
 )
 
 type Config struct {

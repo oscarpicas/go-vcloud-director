@@ -46,7 +46,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/vmware/go-vcloud-director/v2/govcd"
+	"github.com/vmware/go-vcloud-director/govcd"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 )
