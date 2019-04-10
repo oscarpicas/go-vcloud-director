@@ -9,11 +9,13 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"go/types"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"reflect"
+	"strings"
 
 	"github.com/vmware/go-vcloud-director/types/v56"
 	"github.com/vmware/go-vcloud-director/util"
@@ -100,14 +102,25 @@ func (cli *Client) NewRequest(params map[string]string, method string, reqUrl ur
 func ParseErr(resp *http.Response) error {
 
 	errBody := new(types.Error)
+	body, _ := ioutil.ReadAll(resp.Body)
 
-	// if there was an error decoding the body, just return that
-	if err := decodeBody(resp, errBody); err != nil {
-		util.Logger.Printf("[ParseErr]: unhandled response <--\n%+v\n-->\n", resp)
-		return fmt.Errorf("[ParseErr]: error parsing error body for non-200 request: %s (%+v)", err, resp)
+	strBody := string(body)
+	target := "Support ID : "
+	sid := ""
+	if strings.Contains(strBody, target) {
+		beginsid := strings.Index(strBody, target)
+		endsid := strings.Index(strBody[beginsid+len(target):], "<")
+
+		sid = strBody[beginsid+len(target) : beginsid+len(target)+endsid]
 	}
 
-	return fmt.Errorf("API Error: %d: %s", errBody.MajorErrorCode, errBody.Message)
+	// if there was an error decoding the body, just return that
+	if err := decodeErrorBody(body, resp, errBody); err != nil {
+		util.Logger.Printf("[ParseErr]: unhandled response <--\n%+v\n-->\n", resp)
+		return fmt.Errorf("[ParseErr]: Support-ID [%s] error parsing error body for non-200 request: %s (%+v)", sid, err, resp)
+	}
+
+	return fmt.Errorf("Support-ID [%s] : API Error: %d: %s", sid, errBody.MajorErrorCode, errBody.Message)
 }
 
 // decodeBody is used to XML decode a response body
@@ -122,6 +135,18 @@ func decodeBody(resp *http.Response, out interface{}) error {
 
 	// Unmarshal the XML.
 	if err = xml.Unmarshal(body, &out); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// decodeErrorBody is used to XML decode a response body
+func decodeErrorBody(body []byte, resp *http.Response, out interface{}) error {
+	util.ProcessResponseOutput(util.FuncNameCallStack(), resp, fmt.Sprintf("%s", body))
+
+	// Unmarshal the XML.
+	if err := xml.Unmarshal(body, &out); err != nil {
 		return err
 	}
 
