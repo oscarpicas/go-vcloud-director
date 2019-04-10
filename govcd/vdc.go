@@ -477,6 +477,104 @@ func (vdc *Vdc) ComposeVApp(orgvdcnetworks []*types.OrgVDCNetwork, vapptemplate 
 	return *task, nil
 }
 
+func (vdc *Vdc) ComposeVAppWithDHCP(orgvdcnetworks []*types.OrgVDCNetwork, vapptemplate VAppTemplate, storageprofileref types.Reference, name string, description string, acceptalleulas bool) (Task, error) {
+	if vapptemplate.VAppTemplate.Children == nil || orgvdcnetworks == nil {
+		return Task{}, fmt.Errorf("can't compose a new vApp, objects passed are not valid")
+	}
+	// Build request XML
+	vcomp := &types.ComposeVAppParams{
+		Ovf:         "http://schemas.dmtf.org/ovf/envelope/1",
+		Xsi:         "http://www.w3.org/2001/XMLSchema-instance",
+		Xmlns:       "http://www.vmware.com/vcloud/v1.5",
+		Deploy:      false,
+		Name:        name,
+		PowerOn:     false,
+		Description: description,
+		InstantiationParams: &types.InstantiationParams{
+			NetworkConfigSection: &types.NetworkConfigSection{
+				Info: "Configuration parameters for logical networks",
+			},
+		},
+		AllEULAsAccepted: acceptalleulas,
+		SourcedItem: &types.SourcedCompositionItemParam{
+			Source: &types.Reference{
+				HREF: vapptemplate.VAppTemplate.Children.VM[0].HREF,
+				Name: vapptemplate.VAppTemplate.Children.VM[0].Name,
+			},
+			InstantiationParams: &types.InstantiationParams{
+				NetworkConnectionSection: &types.NetworkConnectionSection{
+					Type: vapptemplate.VAppTemplate.Children.VM[0].NetworkConnectionSection.Type,
+					HREF: vapptemplate.VAppTemplate.Children.VM[0].NetworkConnectionSection.HREF,
+					Info: "Network config for sourced item",
+					PrimaryNetworkConnectionIndex: vapptemplate.VAppTemplate.Children.VM[0].NetworkConnectionSection.PrimaryNetworkConnectionIndex,
+				},
+			},
+		},
+	}
+	for index, orgvdcnetwork := range orgvdcnetworks {
+		vcomp.InstantiationParams.NetworkConfigSection.NetworkConfig = append(vcomp.InstantiationParams.NetworkConfigSection.NetworkConfig,
+			types.VAppNetworkConfiguration{
+				NetworkName: orgvdcnetwork.Name,
+				Configuration: &types.NetworkConfiguration{
+					FenceMode: "bridged",
+					ParentNetwork: &types.Reference{
+						HREF: orgvdcnetwork.HREF,
+						Name: orgvdcnetwork.Name,
+						Type: orgvdcnetwork.Type,
+					},
+				},
+			},
+		)
+		vcomp.SourcedItem.InstantiationParams.NetworkConnectionSection.NetworkConnection = append(vcomp.SourcedItem.InstantiationParams.NetworkConnectionSection.NetworkConnection,
+			&types.NetworkConnection{
+				Network:                 orgvdcnetwork.Name,
+				NetworkConnectionIndex:  index,
+				IsConnected:             true,
+				IPAddressAllocationMode: "DHCP",
+			},
+		)
+		vcomp.SourcedItem.NetworkAssignment = append(vcomp.SourcedItem.NetworkAssignment,
+			&types.NetworkAssignment{
+				InnerNetwork:     orgvdcnetwork.Name,
+				ContainerNetwork: orgvdcnetwork.Name,
+			},
+		)
+	}
+	if storageprofileref.HREF != "" {
+		vcomp.SourcedItem.StorageProfile = &storageprofileref
+	}
+
+	output, err := xml.MarshalIndent(vcomp, "  ", "    ")
+	if err != nil {
+		return Task{}, fmt.Errorf("error marshaling vapp compose: %s", err)
+	}
+	util.Logger.Printf("\n\nXML DEBUG: %s\n\n", string(output))
+	requestData := bytes.NewBufferString(xml.Header + string(output))
+
+	vdcHref, err := url.ParseRequestURI(vdc.Vdc.HREF)
+	if err != nil {
+		return Task{}, fmt.Errorf("error getting vdc href: %v", err)
+	}
+	vdcHref.Path += "/action/composeVApp"
+
+	req := vdc.client.NewRequest(map[string]string{}, "POST", *vdcHref, requestData)
+	req.Header.Add("Content-Type", "application/vnd.vmware.vcloud.composeVAppParams+xml")
+	resp, err := checkResp(vdc.client.Http.Do(req))
+	if err != nil {
+		return Task{}, fmt.Errorf("error instantiating a new vApp: %s", err)
+	}
+
+	vapp := NewVApp(vdc.client)
+	if err = decodeBody(resp, vapp.VApp); err != nil {
+		return Task{}, fmt.Errorf("error decoding vApp response: %s", err)
+	}
+
+	task := NewTask(vdc.client)
+	task.Task = vapp.VApp.Tasks.Task[0]
+	// The request was successful
+	return *task, nil
+}
+
 func (vdc *Vdc) FindVAppByName(vapp string) (VApp, error) {
 
 	err := vdc.Refresh()
