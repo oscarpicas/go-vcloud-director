@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"go/types"
 	"io"
 	"io/ioutil"
 	"net/http"
