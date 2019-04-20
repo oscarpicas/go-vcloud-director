@@ -709,6 +709,20 @@ func (vdc *Vdc) QueryVM(vappName, vmName string) (VMRecord, error) {
 	return *newVM, nil
 }
 
+func (vdc *Vdc) FindDefaultVMByVAppID(vappid string) (VM, error) {
+	vapp, err := vdc.FindVAppByID(vappid)
+	if err != nil {
+		return VM{}, err
+	}
+
+	vm := vapp.VApp.Children.VM[0]
+
+	r := NewVM(vdc.client)
+	r.VM = vm
+
+	return *r, nil
+}
+
 func (vdc *Vdc) FindVAppByID(vappid string) (VApp, error) {
 
 	// Horrible hack to fetch a vapp with its id.
