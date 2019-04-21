@@ -31,6 +31,11 @@ func NewEdgeGateway(cli *Client) *EdgeGateway {
 	}
 }
 
+func (eGW *EdgeGateway) DeleteDhcpPool(network *types.OrgVDCNetwork, dhcppool []interface{}) (Task, error) {
+	// FIXME Not implemented
+	return Task{}, nil
+}
+
 func (eGW *EdgeGateway) AddDhcpPool(network *types.OrgVDCNetwork, dhcppool []interface{}) (Task, error) {
 	newEdgeConfig := eGW.EdgeGateway.Configuration.EdgeGatewayServiceConfiguration
 	util.Logger.Printf("[DEBUG] EDGE GATEWAY: %#v", newEdgeConfig)
