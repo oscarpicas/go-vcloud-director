@@ -61,6 +61,36 @@ func (vat *VAppTemplate) GetTemplateDiskSize() (int, error) {
 	return 0, nil
 }
 
+// GetMemorySize recovers CPU size
+func (vat *VAppTemplate) GetCPUSize() (int, error) {
+	theUrl, _ := url.Parse(vat.VAppTemplate.HREF)
+
+	req := vat.client.NewRequest(map[string]string{}, "GET", *theUrl, nil)
+	req.Header.Add("Accept", "vnd.vmware.vcloud.org+xml;version="+vat.client.APIVersion)
+
+	resp, err := checkResp(vat.client.Http.Do(req))
+	if err != nil {
+		return 0, err
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	doc, err := xmlquery.Parse(strings.NewReader(string(body)))
+
+	for _, n := range xmlquery.Find(doc, "//ovf:Item") {
+		desc := n.SelectElement("rasd:Description")
+		if desc != nil {
+			if strings.Contains(desc.InnerText(), "Number of Virtual CPUs") {
+				diskSize := n.SelectElement("rasd:VirtualQuantity")
+				if diskSize != nil {
+					return strconv.Atoi(diskSize.InnerText())
+				}
+			}
+		}
+	}
+
+	return 0, nil
+}
+
 // GetMemorySize recovers memory size in MB
 func (vat *VAppTemplate) GetMemorySize() (int, error) {
 	theUrl, _ := url.Parse(vat.VAppTemplate.HREF)
