@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -572,6 +573,47 @@ func (vm *VM) DetachDisk(diskParams *types.DiskAttachOrDetachParams) (Task, erro
 	}
 
 	return vm.attachOrDetachDisk(diskParams, types.RelDiskDetach)
+}
+
+func (vm *VM) getRaw(restUrl string) (string, error) {
+	theUrl, _ := url.Parse(restUrl)
+
+	req := vm.client.NewRequest(map[string]string{}, "GET", *theUrl, nil)
+	req.Header.Add("Accept", "vnd.vmware.vcloud.org+xml;version="+vm.client.APIVersion)
+
+	resp, err := checkResp(vm.client.Http.Do(req))
+	if err != nil {
+		return "", err
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func (vm *VM) putRaw(restUrl string, content string) (Task, error) {
+	theUrl, _ := url.Parse(restUrl)
+
+	buffer := bytes.NewBufferString(content)
+
+	req := vm.client.NewRequest(map[string]string{}, "PUT", *theUrl, buffer)
+	req.Header.Add("Accept", "vnd.vmware.vcloud.org+xml;version="+vm.client.APIVersion)
+
+	resp, err := checkResp(vm.client.Http.Do(req))
+	if err != nil {
+		return Task{}, err
+	}
+
+	task := NewTask(vm.client)
+
+	if err = decodeBody(resp, task.Task); err != nil {
+		return Task{}, fmt.Errorf("error decoding Task response: %s", err)
+	}
+
+	// The request was successful
+	return *task, nil
 }
 
 // Helper function which finds media and calls InsertMedia

@@ -9,6 +9,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"strconv"
 	"time"
@@ -1207,6 +1208,47 @@ func (vapp *VApp) AddIsolatedNetwork(newIsolatedNetworkSettings *VappNetworkSett
 
 	return updateNetworkConfigurations(vapp, networkConfigurations)
 
+}
+
+func (vapp *VApp) getRaw(restUrl string) (string, error) {
+	theUrl, _ := url.Parse(restUrl)
+
+	req := vapp.client.NewRequest(map[string]string{}, "GET", *theUrl, nil)
+	req.Header.Add("Accept", "vnd.vmware.vcloud.org+xml;version="+vapp.client.APIVersion)
+
+	resp, err := checkResp(vapp.client.Http.Do(req))
+	if err != nil {
+		return "", err
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func (vapp *VApp) putRaw(restUrl string, content string) (Task, error) {
+	theUrl, _ := url.Parse(restUrl)
+
+	buffer := bytes.NewBufferString(content)
+
+	req := vapp.client.NewRequest(map[string]string{}, "PUT", *theUrl, buffer)
+	req.Header.Add("Accept", "vnd.vmware.vcloud.org+xml;version="+vapp.client.APIVersion)
+
+	resp, err := checkResp(vapp.client.Http.Do(req))
+	if err != nil {
+		return Task{}, err
+	}
+
+	task := NewTask(vapp.client)
+
+	if err = decodeBody(resp, task.Task); err != nil {
+		return Task{}, fmt.Errorf("error decoding Task response: %s", err)
+	}
+
+	// The request was successful
+	return *task, nil
 }
 
 func validateNetworkConfigSettings(networkSettings *VappNetworkSettings) error {
