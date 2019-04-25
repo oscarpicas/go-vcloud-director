@@ -575,8 +575,11 @@ func (vm *VM) DetachDisk(diskParams *types.DiskAttachOrDetachParams) (Task, erro
 	return vm.attachOrDetachDisk(diskParams, types.RelDiskDetach)
 }
 
-func (vm *VM) getRaw(restUrl string) (string, error) {
-	theUrl, _ := url.Parse(restUrl)
+func (vm *VM) GetRaw(restUrl string) (string, error) {
+	theUrl, err := url.Parse(vm.VM.HREF + restUrl)
+	if err != nil {
+		return "", err
+	}
 
 	req := vm.client.NewRequest(map[string]string{}, "GET", *theUrl, nil)
 	req.Header.Add("Accept", "vnd.vmware.vcloud.org+xml;version="+vm.client.APIVersion)
@@ -593,8 +596,11 @@ func (vm *VM) getRaw(restUrl string) (string, error) {
 	return string(body), nil
 }
 
-func (vm *VM) putRaw(restUrl string, content string) (Task, error) {
-	theUrl, _ := url.Parse(restUrl)
+func (vm *VM) PutRaw(restUrl string, content string) (Task, error) {
+	theUrl, err := url.Parse(vm.VM.HREF + restUrl)
+	if err != nil {
+		return Task{}, err
+	}
 
 	buffer := bytes.NewBufferString(content)
 

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -413,6 +414,53 @@ func (eGW *EdgeGateway) CreateFirewallRules(defaultAction string, rules []*types
 			return Task{}, fmt.Errorf("error reconfiguring Edge Gateway: %s", err)
 		}
 		break
+	}
+
+	task := NewTask(eGW.client)
+
+	if err = decodeBody(resp, task.Task); err != nil {
+		return Task{}, fmt.Errorf("error decoding Task response: %s", err)
+	}
+
+	// The request was successful
+	return *task, nil
+}
+
+func (eGW *EdgeGateway) GetRaw(restUrl string) (string, error) {
+	theUrl, err := url.Parse(eGW.EdgeGateway.HREF + restUrl)
+	if err != nil {
+		return "", err
+	}
+
+	req := eGW.client.NewRequest(map[string]string{}, "GET", *theUrl, nil)
+	req.Header.Add("Accept", "vnd.vmware.vcloud.org+xml;version="+eGW.client.APIVersion)
+
+	resp, err := checkResp(eGW.client.Http.Do(req))
+	if err != nil {
+		return "", err
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func (eGW *EdgeGateway) PutRaw(restUrl string, content string) (Task, error) {
+	theUrl, err := url.Parse(eGW.EdgeGateway.HREF + restUrl)
+	if err != nil {
+		return Task{}, err
+	}
+
+	buffer := bytes.NewBufferString(content)
+
+	req := eGW.client.NewRequest(map[string]string{}, "PUT", *theUrl, buffer)
+	req.Header.Add("Accept", "vnd.vmware.vcloud.org+xml;version="+eGW.client.APIVersion)
+
+	resp, err := checkResp(eGW.client.Http.Do(req))
+	if err != nil {
+		return Task{}, err
 	}
 
 	task := NewTask(eGW.client)

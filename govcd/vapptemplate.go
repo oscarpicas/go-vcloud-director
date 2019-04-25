@@ -122,7 +122,10 @@ func (vat *VAppTemplate) GetMemorySize() (int, error) {
 }
 
 func (vat *VAppTemplate) GetRaw(restUrl string) (string, error) {
-	theUrl, _ := url.Parse(restUrl)
+	theUrl, err := url.Parse(vat.VAppTemplate.HREF + restUrl)
+	if err != nil {
+		return "", err
+	}
 
 	req := vat.client.NewRequest(map[string]string{}, "GET", *theUrl, nil)
 	req.Header.Add("Accept", "vnd.vmware.vcloud.org+xml;version="+vat.client.APIVersion)
@@ -140,7 +143,10 @@ func (vat *VAppTemplate) GetRaw(restUrl string) (string, error) {
 }
 
 func (vat *VAppTemplate) PutRaw(restUrl string, content string) (Task, error) {
-	theUrl, _ := url.Parse(restUrl)
+	theUrl, err := url.Parse(vat.VAppTemplate.HREF + restUrl)
+	if err != nil {
+		return Task{}, err
+	}
 
 	buffer := bytes.NewBufferString(content)
 
