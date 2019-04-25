@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"github.com/beevik/etree"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -620,6 +621,36 @@ func (vm *VM) PutRaw(restUrl string, content string) (Task, error) {
 
 	// The request was successful
 	return *task, nil
+}
+
+func (vm *VM) ChangeDiskSize(newSize int) (Task, error) {
+	rawInfo, err := vm.GetRaw("/virtualHardwareSection/disks")
+	if err != nil {
+		return Task{}, err
+	}
+
+	doc := etree.NewDocument()
+	if err := doc.ReadFromString(rawInfo); err != nil {
+		return Task{}, err
+	}
+
+	ds := newSize
+
+	for _, t := range doc.FindElements("//rasd:HostResource") {
+		attr := t.SelectAttr("vcloud:capacity")
+		if attr != nil {
+			fmt.Println(attr.Value)
+			attr.Value = strconv.Itoa(ds * 1024)
+		}
+	}
+
+	rebuilded, _ := doc.WriteToString()
+	task, err := vm.PutRaw("/virtualHardwareSection/disks", rebuilded)
+	if err != nil {
+		return Task{}, err
+	}
+
+	return task, nil
 }
 
 // Helper function which finds media and calls InsertMedia
