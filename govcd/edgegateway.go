@@ -473,6 +473,32 @@ func (eGW *EdgeGateway) PutRaw(restUrl string, content string) (Task, error) {
 	return *task, nil
 }
 
+func (eGW *EdgeGateway) PostRaw(restUrl string, content string) (Task, error) {
+	theUrl, err := url.Parse(eGW.EdgeGateway.HREF + restUrl)
+	if err != nil {
+		return Task{}, err
+	}
+
+	buffer := bytes.NewBufferString(content)
+
+	req := eGW.client.NewRequest(map[string]string{}, "POST", *theUrl, buffer)
+	req.Header.Add("Accept", "vnd.vmware.vcloud.org+xml;version="+eGW.client.APIVersion)
+
+	resp, err := checkResp(eGW.client.Http.Do(req))
+	if err != nil {
+		return Task{}, err
+	}
+
+	task := NewTask(eGW.client)
+
+	if err = decodeBody(resp, task.Task); err != nil {
+		return Task{}, fmt.Errorf("error decoding Task response: %s", err)
+	}
+
+	// The request was successful
+	return *task, nil
+}
+
 func (eGW *EdgeGateway) Refresh() error {
 
 	if eGW.EdgeGateway == nil {
@@ -719,6 +745,54 @@ func (eGW *EdgeGateway) Create1to1Mapping(internal, external, description string
 	}
 
 	newEdgeConfig.FirewallService.FirewallRule = append(newEdgeConfig.FirewallService.FirewallRule, fwout)
+
+	output, err := xml.MarshalIndent(newEdgeConfig, "  ", "    ")
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+	}
+
+	util.Logger.Printf("\n\nXML DEBUG: %s\n\n", string(output))
+
+	buffer := bytes.NewBufferString(xml.Header + string(output))
+
+	apiEndpoint, _ := url.ParseRequestURI(eGW.EdgeGateway.HREF)
+	apiEndpoint.Path += "/action/configureServices"
+
+	req := eGW.client.NewRequest(map[string]string{}, "POST", *apiEndpoint, buffer)
+
+	req.Header.Add("Content-Type", "application/vnd.vmware.admin.edgeGatewayServiceConfiguration+xml")
+
+	resp, err := checkResp(eGW.client.Http.Do(req))
+	if err != nil {
+		return Task{}, fmt.Errorf("error reconfiguring Edge Gateway: %s", err)
+	}
+
+	task := NewTask(eGW.client)
+
+	if err = decodeBody(resp, task.Task); err != nil {
+		return Task{}, fmt.Errorf("error decoding Task response: %s", err)
+	}
+
+	// The request was successful
+	return *task, nil
+
+}
+
+func (eGW *EdgeGateway) EnableFirewall(newState bool) (Task, error) {
+
+	// Refresh EdgeGateway rules
+	err := eGW.Refresh()
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+	}
+
+	newEdgeConfig := eGW.EdgeGateway.Configuration.EdgeGatewayServiceConfiguration
+
+	if newEdgeConfig.NatService == nil {
+		newEdgeConfig.NatService = &types.NatService{}
+	}
+
+	newEdgeConfig.FirewallService.IsEnabled = newState
 
 	output, err := xml.MarshalIndent(newEdgeConfig, "  ", "    ")
 	if err != nil {
